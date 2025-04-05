@@ -1,5 +1,6 @@
 #include "communication.h"
 #include <sys/wait.h>
+#include "thread_handler.h"
 
 int semid, shmid, msgid;
 JobQueue *queue;
@@ -71,6 +72,8 @@ int main()
     printf("---------------------MultiUser Print Server--------------------\n");
     printf("---------------------------------------------------------------\n\n");
     init_ipc();
+    start_thread_pool(queue, semid);
     process_jobs();
+    stop_thread_pool();
     return 0;
 }
