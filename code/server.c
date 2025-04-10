@@ -1,6 +1,7 @@
 #include "communication.h"
 #include <sys/wait.h>
 #include "thread_handler.h"
+#include <pthread.h>
 
 int semid, shmid, msgid;
 JobQueue *queue;
@@ -73,7 +74,14 @@ int main()
     printf("---------------------------------------------------------------\n\n");
     init_ipc();
     start_thread_pool(queue, semid);
-    process_jobs();
+    //process_jobs();
+
+    //thread to receive queue jobs
+    pthread_t job_receiver_thread;
+    pthread_create(&job_receiver_thread, NULL, process_jobs, NULL);
+    //wait for job receiver thread to finish on exit
+    pthread_join(job_receiver_thread, NULL);
+    
     stop_thread_pool();
     return 0;
 }
