@@ -24,8 +24,8 @@ int main()
         printf("JOB: ");
         fgets(jobtext,TEXT_LIMIT,stdin);
         jobtext[strcspn(jobtext,"\n")]='\0';
-       // if (strcmp(jobtext,"exit") == 0)
-           // break;
+       if (strcmp(jobtext,"exit") == 0)
+            break;
         snprintf(msg.mestext,MSG_SIZE,"%d %s",pid,jobtext);
 
         if (msgsnd(msgid, &msg,sizeof(msg.mestext),0)==-1) 
@@ -33,8 +33,6 @@ int main()
         else
             printf("[CLIENT %d] Sent:- %s\n",pid,jobtext);
 
-        if (strcmp(jobtext, "exit") == 0)
-            break;
     }
     return 0;
 }
