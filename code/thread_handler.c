@@ -76,16 +76,6 @@ void stop_thread_pool()
         pthread_join(threads[i], NULL);
     }
 
-    // Push the exit job into the queue
-    sem_wait_custom(EMPTY);
-    sem_wait_custom(MUTEX);
-    sharedQueue->jobs[sharedQueue->rear] = exitJob;
-    sharedQueue->rear = (sharedQueue->rear + 1) % MAX_JOBS;
-    sharedQueue->count++;
-    sem_signal_custom(MUTEX);
-    sem_signal_custom(FULL);
-
-    
     printf("[THREAD_HANDLER]: All threads exited.\n");
 }
 
