@@ -16,9 +16,9 @@
 #define MSG_SIZE 256
 
 // Keys
-#define SHM_KEY 1234            // for shared memory
+#define SHM_KEY 1234            //for shared memory
 #define SEM_KEY 5678            // for semaphores
-#define MSG_KEY 9012            // for message queue
+#define MSG_KEY 9012            //for message queue
 
 // Semaphore indices (three defined)
 #define MUTEX 0
@@ -46,5 +46,13 @@ typedef struct
     Job jobs[MAX_JOBS];
     int front,rear,count;
 } JobQueue;
+
+// Declare these as extern so they can be shared across files
+extern JobQueue *queue;
+extern int semid;
+
+// Semaphore helper functions (implemented in your semaphore utility file or server)
+void sem_wait(int sem_num);
+void sem_signal(int sem_num);
 
 #endif
