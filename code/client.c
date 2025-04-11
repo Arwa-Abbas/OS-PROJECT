@@ -1,4 +1,4 @@
-#include "communication.h"
+#include"communication.h"
 #define TEXT_LIMIT 240
 
 int main() 
@@ -24,7 +24,7 @@ int main()
         printf("JOB: ");
         fgets(jobtext,TEXT_LIMIT,stdin);
         jobtext[strcspn(jobtext,"\n")]='\0';
-       if (strcmp(jobtext,"exit") == 0)
+        if (strcmp(jobtext,"exit") == 0)
             break;
         snprintf(msg.mestext,MSG_SIZE,"%d %s",pid,jobtext);
 
@@ -32,7 +32,7 @@ int main()
             perror("ERROR: msgsnd failed");
         else
             printf("[CLIENT %d] Sent:- %s\n",pid,jobtext);
-
     }
     return 0;
 }
+
