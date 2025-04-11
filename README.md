@@ -9,3 +9,4 @@ IMPLEMENTED
 
 PROGRESS
 -> as client server is one thread start working on multithreading and threadpool in thread_handler 
+-> Performed multithreading, making changes in server, client, communication. The core functionality for multithreading added in thread_handler.c file. 
