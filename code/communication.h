@@ -13,7 +13,7 @@
 
 //JOB INFO
 #define MAX_JOBS 10
-#define MSG_SIZE 256
+#define MSG_SIZE 512
 
 // Keys
 #define SHM_KEY 1234            //for shared memory
@@ -38,6 +38,8 @@ typedef struct
 {
     int jobid;
     char content[MSG_SIZE];
+     int priority;
+     int algorithm;
 } Job;
 
 // Job Queue
