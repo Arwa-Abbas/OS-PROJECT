@@ -12,7 +12,6 @@ int semid;
 #define YELLOW  "\033[1;33m"
 #define RESET   "\033[0m"
 
-
 void sem_wait(int sem_num) 
 {
     struct sembuf op = {sem_num, -1, 0};
