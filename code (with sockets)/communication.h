@@ -17,26 +17,28 @@
 #define MAX_CLIENTS 10
 
 // Message structure
-struct message 
+struct message
 {
     long mestype;
     char mesfilename[MSG_SIZE];
     char mesheading[MSG_SIZE];
     char mescontent[MSG_SIZE];
+    int job_type;
 };
 
 // Job structure
-typedef struct 
+typedef struct
 {
     int jobid;
     char filename[MSG_SIZE];
     char heading[MSG_SIZE];
     char content[MSG_SIZE];
     int client_socket;            // To track which client sent the job
+    int job_type;
 } Job;
 
 // Job Queue
-typedef struct 
+typedef struct
 {
     Job jobs[MAX_JOBS];
     int front, rear, count;
