@@ -5,57 +5,71 @@
 #define TEXT_LIMIT 512
 #define MAX_ACCOUNTS 10
 
-struct Account
-{
-char username[TEXT_LIMIT];
-char password[TEXT_LIMIT];
+struct Account {
+    char username[TEXT_LIMIT];
+    char password[TEXT_LIMIT];
 };
 
 struct Account accounts[MAX_ACCOUNTS];
-int num_accounts=0;
+int num_accounts = 0;
 
-int login(char *username, char *password)
-{
-    for (int i=0;i<num_accounts;i++)
-    {
+// Load accounts from file
+void load_accounts() {
+    FILE *file = fopen("accounts.txt", "r");
+    if (file == NULL) return;
+
+    while (fscanf(file, "%s %s", accounts[num_accounts].username, accounts[num_accounts].password) == 2) {
+        num_accounts++;
+        if (num_accounts >= MAX_ACCOUNTS) break;
+    }
+
+    fclose(file);
+}
+
+// Save a new account to file
+void save_account(const char *username, const char *password) {
+    FILE *file = fopen("accounts.txt", "a");
+    if (file != NULL) {
+        fprintf(file, "%s %s\n", username, password);
+        fclose(file);
+    }
+}
+
+int login(char *username, char *password) {
+    for (int i = 0; i < num_accounts; i++) {
         if (strcmp(accounts[i].username, username) == 0 &&
-            strcmp(accounts[i].password, password) == 0)
-            {
+            strcmp(accounts[i].password, password) == 0) {
             return 1;
         }
     }
     return 0;
 }
 
-
-int create_account(char *username, char *password)
-{
-    if (num_accounts >= MAX_ACCOUNTS)
-    {
+int create_account(char *username, char *password) {
+    if (num_accounts >= MAX_ACCOUNTS) {
         printf("Account limit reached. Cannot create a new account.\n");
         return 0;
     }
 
     // Check if the username already exists
-    for (int i = 0; i < num_accounts; i++)
-    {
-        if (strcmp(accounts[i].username, username) == 0)
-        {
+    for (int i = 0; i < num_accounts; i++) {
+        if (strcmp(accounts[i].username, username) == 0) {
             printf("Username already exists.\n");
             return 0;
         }
     }
+
     strcpy(accounts[num_accounts].username, username);
     strcpy(accounts[num_accounts].password, password);
     num_accounts++;
+    save_account(username, password);  // Save to file
     return 1;
 }
-
 
 int main() {
     int sock = 0;
     struct sockaddr_in serv_addr;
-   
+
     if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         printf("\nSocket Creation Error\n");
         return -1;
@@ -82,23 +96,24 @@ int main() {
     int pid = getpid();
     printf("\n[CLIENT %d] Connected to Server at %s:%d\n", pid, server_ip, PORT);
 
+    // Load saved accounts
+    load_accounts();
+
     struct message msg;
     msg.mestype = 1;
     int choice;
-   
-    char username[TEXT_LIMIT],password[TEXT_LIMIT];
+
+    char username[TEXT_LIMIT], password[TEXT_LIMIT];
     int logged_in = 0;
-   
-     while (!logged_in)
-     {
+
+    while (!logged_in) {
         printf("\n1. Login\n");
         printf("2. Create Account\n");
         printf("Enter your choice: ");
         scanf("%d", &choice);
         getchar();
-       
-        if (choice == 1)
-        {
+
+        if (choice == 1) {
             printf("\nEnter Username: ");
             fgets(username, sizeof(username), stdin);
             username[strcspn(username, "\n")] = '\0';
@@ -107,18 +122,13 @@ int main() {
             fgets(password, sizeof(password), stdin);
             password[strcspn(password, "\n")] = '\0';
 
-            if (login(username, password))
-            {
+            if (login(username, password)) {
                 printf("Login successful.\n");
                 logged_in = 1;
-            }
-            else
-            {
+            } else {
                 printf("Invalid username or password. Please try again.\n");
             }
-        }
-        else if (choice == 2)
-        {
+        } else if (choice == 2) {
             printf("\nEnter a new Username: ");
             fgets(username, sizeof(username), stdin);
             username[strcspn(username, "\n")] = '\0';
@@ -127,17 +137,12 @@ int main() {
             fgets(password, sizeof(password), stdin);
             password[strcspn(password, "\n")] = '\0';
 
-            if (create_account(username, password))
-            {
+            if (create_account(username, password)) {
                 printf("Account created successfully\n");
-            }
-            else
-            {
+            } else {
                 printf("Account creation failed.\n");
             }
-        }
-        else
-        {
+        } else {
             printf("Invalid option. Please try again.\n");
         }
     }
@@ -164,22 +169,18 @@ int main() {
             printf("Enter filename: ");
             fgets(msg.mesfilename, sizeof(msg.mesfilename), stdin);
             msg.mesfilename[strcspn(msg.mesfilename, "\n")] = '\0';
-           
-            // Default priority (server may or may not use it)
+
             msg.priority = 5;
-           
             send(sock, &msg, sizeof(msg), 0);
 
             char buffer[MSG_SIZE] = {0};
             read(sock, buffer, MSG_SIZE);
             printf("\nFile content:\n%s\n", buffer);
-        }
-        else if (msg.job_type == 2) {
+        } else if (msg.job_type == 2) {
             printf("Enter filename: ");
             fgets(msg.mesfilename, sizeof(msg.mesfilename), stdin);
             msg.mesfilename[strcspn(msg.mesfilename, "\n")] = '\0';
 
-            // Always ask for priority since client doesn't know server's algorithm
             printf("Enter priority (1-10, 1=highest): ");
             scanf("%d", &msg.priority);
             getchar();
