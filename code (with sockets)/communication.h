@@ -21,6 +21,7 @@
 #define ROUND_ROBIN 2
 #define PRIORITY 3
 
+
 // Message structure
 struct message
 {
@@ -29,7 +30,7 @@ struct message
     char mesheading[MSG_SIZE];
     char mescontent[MSG_SIZE];
     int job_type;
-    int priority;  // Added for priority scheduling
+      int priority;  
 };
 
 // Job structure
@@ -41,16 +42,20 @@ typedef struct
     char content[MSG_SIZE];
     int client_socket;            // To track which client sent the job
     int job_type;
-    int priority;                 // Priority for scheduling
-    time_t arrival_time;          // For FCFS
+      int priority;                 // Priority for scheduling
+    time_t arrival_time;     
 } Job;
 
-typedef struct {
+
+// Job Queue
+typedef struct
+{
     Job jobs[MAX_JOBS];
-    int count;
-    int current_algorithm;
-    int rr_counter;  // For round robin only
+    int front, rear, count;
+     int current_algorithm;
+    int rr_counter;
 } JobQueue;
+
 
 extern JobQueue *queue;
 extern pthread_mutex_t queue_mutex;
@@ -58,12 +63,11 @@ extern pthread_cond_t queue_not_empty;
 extern pthread_cond_t queue_not_full;
 
 void init_queue();
-int add_job_to_queue(Job new_job);
+void add_job_to_queue(Job new_job);
 int remove_job_from_queue(Job *job);
 void* handle_client(void* arg);
 void set_scheduling_algorithm(int algorithm);
-void sort_queue_fcfs();
-void sort_queue_priority();
-void log_job_to_file(Job job);
+void sort_queue_by_priority(void);
+void write_queue_to_log();
 
 #endif
