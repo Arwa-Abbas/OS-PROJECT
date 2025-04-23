@@ -30,7 +30,7 @@ struct message
     char mesheading[MSG_SIZE];
     char mescontent[MSG_SIZE];
     int job_type;
-      int priority;  
+    int priority;  
 };
 
 // Job structure
@@ -42,8 +42,10 @@ typedef struct
     char content[MSG_SIZE];
     int client_socket;            // To track which client sent the job
     int job_type;
-      int priority;                 // Priority for scheduling
-    time_t arrival_time;     
+    int priority;                 // Priority for scheduling
+    time_t arrival_time;    
+    time_t completion_time; 
+    int execution_time;
 } Job;
 
 
