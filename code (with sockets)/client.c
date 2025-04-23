@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <arpa/inet.h>
+#include <arpa/inet.h>     //for ip address handling
 #include <netdb.h>
 
 #define TEXT_LIMIT 512
@@ -11,18 +11,19 @@
 
 struct Account
 {
-    char username[TEXT_LIMIT];
-    char password[TEXT_LIMIT];
+char username[TEXT_LIMIT];
+char password[TEXT_LIMIT];
 };
 
 struct Account accounts[MAX_ACCOUNTS];
 int num_accounts=0;
 
-void load_accounts()
+// Load accounts from file
+void load_accounts() 
 {
     FILE *file = fopen("accounts.txt", "r");
     if (file == NULL) return;
-    while (fscanf(file, "%s %s", accounts[num_accounts].username, accounts[num_accounts].password) == 2)
+    while (fscanf(file, "%s %s", accounts[num_accounts].username, accounts[num_accounts].password) == 2) 
     {
         num_accounts++;
         if (num_accounts >= MAX_ACCOUNTS) break;
@@ -30,40 +31,43 @@ void load_accounts()
     fclose(file);
 }
 
-void save_account(const char *username, const char *password)
+// Save a new account to file
+void save_account(const char *username, const char *password) 
 {
     FILE *file = fopen("accounts.txt", "a");
-    if (file != NULL)
+    if (file != NULL) 
     {
         fprintf(file, "%s %s\n", username, password);
         fclose(file);
     }
 }
 
-int login(char *username, char *password)
+int login(char *username, char *password) 
 {
-    for (int i=0;i<num_accounts;i++)
+    for (int i=0;i<num_accounts;i++) 
     {
         if (strcmp(accounts[i].username, username) == 0 &&
-            strcmp(accounts[i].password, password) == 0)
-        {
+            strcmp(accounts[i].password, password) == 0) 
+            {
             return 1;
         }
     }
-    return 0;
+    return 0; 
 }
 
-int create_account(char *username, char *password)
+
+int create_account(char *username, char *password) 
 {
-    if (num_accounts >= MAX_ACCOUNTS)
+    if (num_accounts >= MAX_ACCOUNTS) 
     {
         printf("Account limit reached. Cannot create a new account.\n");
         return 0;
     }
 
-    for (int i = 0; i < num_accounts; i++)
+    // Check if the username already exists
+    for (int i = 0; i < num_accounts; i++) 
     {
-        if (strcmp(accounts[i].username, username) == 0)
+        if (strcmp(accounts[i].username, username) == 0) 
         {
             printf("Username already exists.\n");
             return 0;
@@ -71,10 +75,11 @@ int create_account(char *username, char *password)
     }
     strcpy(accounts[num_accounts].username, username);
     strcpy(accounts[num_accounts].password, password);
-    save_account(username, password);
+    save_account(username, password); 
     num_accounts++;
     return 1;
 }
+
 
 int main()
 {
@@ -115,19 +120,19 @@ int main()
     struct message msg;
     msg.mestype=1;
     int choice;
-   
+    
     char username[TEXT_LIMIT],password[TEXT_LIMIT];
     int logged_in = 0;
-   
-    while (!logged_in)
-    {
+    
+     while (!logged_in) 
+     {
         printf("\n1. Login\n");
         printf("2. Create Account\n");
         printf("Enter your choice: ");
         scanf("%d", &choice);
         getchar();
-       
-        if (choice == 1)
+        
+        if (choice == 1) 
         {
             printf("\nEnter Username: ");
             fgets(username, sizeof(username), stdin);
@@ -137,17 +142,17 @@ int main()
             fgets(password, sizeof(password), stdin);
             password[strcspn(password, "\n")] = '\0';
 
-            if (login(username, password))
+            if (login(username, password)) 
             {
                 printf("Login successful.\n");
                 logged_in = 1;
-            }
-            else
+            } 
+            else 
             {
                 printf("Invalid username or password. Please try again.\n");
             }
-        }
-        else if (choice == 2)
+        } 
+        else if (choice == 2) 
         {
             printf("\nEnter a new Username: ");
             fgets(username, sizeof(username), stdin);
@@ -157,21 +162,21 @@ int main()
             fgets(password, sizeof(password), stdin);
             password[strcspn(password, "\n")] = '\0';
 
-            if (create_account(username, password))
+            if (create_account(username, password)) 
             {
                 printf("Account created successfully\n");
-            }
-            else
+            } 
+            else 
             {
                 printf("Account creation failed.\n");
             }
-        }
-        else
+        } 
+        else 
         {
             printf("Invalid option. Please try again.\n");
         }
     }
-   
+    
     while (1)
     {
         printf("\nDo you want to:\n");
@@ -188,36 +193,64 @@ int main()
         }
         else if (choice==1)
         {
-            int job_type;
-            printf("\n-----------Choose Job Type--------------\n\n");
-            printf("1. Submit Existing File (server will read the file)\n");
-            printf("2. Create a New file (you provide heading and content)\n");
-            printf("Enter your choice: ");
-            scanf("%d", &job_type);
-            getchar();
+             int job_type;
+             printf("\n-----------Choose Job Type--------------\n\n");
+             printf("1. Submit Existing File (server will read the file)\n");
+             printf("2. Create a New file (you provide heading and content)\n");
+             printf("Enter your choice: ");
+             scanf("%d", &job_type);
+             getchar();
              
-            if (job_type == 1) {
-                printf("\n------------------------------------------------------------\n");
-                char filename[TEXT_LIMIT];
-                printf("[CLIENT %d] filename: ", pid);
-                fgets(filename, sizeof(filename), stdin);
-                filename[strcspn(filename, "\n")] = '\0';
-               
-                if (strcmp(filename, "exit") == 0) {
-                    break;
-                }
-               
-                strncpy(msg.mesfilename, filename, TEXT_LIMIT);
-                msg.job_type = 1;
-                msg.priority = 5;
-               
-                send(sock, &msg, sizeof(msg), 0);
-                printf("[CLIENT %d] Sent request to print existing file: %s\n", pid, filename);
-
-                char buffer[MSG_SIZE] = {0};
-                read(sock, buffer, MSG_SIZE);
-                printf("[CLIENT %d] Server Response: %s\n", pid, buffer);
+             if (job_type == 1) {
+            printf("\n------------------------------------------------------------\n");
+            char filename[TEXT_LIMIT];
+            printf("[CLIENT %d] filename: ", pid);
+            fgets(filename, sizeof(filename), stdin);
+            filename[strcspn(filename, "\n")] = '\0';
+            
+            if (strcmp(filename, "exit") == 0) {
+                break;
             }
+            
+            strncpy(msg.mesfilename, filename, TEXT_LIMIT);
+            msg.job_type = 1;
+            
+              // Read file content
+    FILE *file = fopen(filename, "r");
+    if (file == NULL) {
+        perror("Error opening file");
+        printf("[CLIENT %d] Could not open file: %s\n", pid, filename);
+        continue;  // Skip to next iteration
+    }
+
+    // Get file size
+    fseek(file, 0, SEEK_END);
+    long file_size = ftell(file);
+    fseek(file, 0, SEEK_SET);
+
+    // Read file content
+    char *file_content = (char*)malloc(file_size + 1);
+    size_t bytes_read = fread(file_content, 1, file_size, file);
+    file_content[bytes_read] = '\0';
+    fclose(file);
+
+              int priority;
+              printf("Enter Priority (1-5, 1=highest): ");
+              scanf("%d", &priority);
+              getchar();
+            
+            msg.priority=priority;
+            strncpy(msg.mesfilename, filename, TEXT_LIMIT);
+    strncpy(msg.mescontent,file_content, TEXT_LIMIT);
+    
+            send(sock, &msg, sizeof(msg), 0);
+            printf("[CLIENT %d] Sent request to print existing file: %s\n", pid, filename);
+             
+            char buffer[MSG_SIZE] = {0};
+            read(sock, buffer, MSG_SIZE);
+            printf("[CLIENT %d] Server Response: %s\n", pid, buffer);
+        }
+           
             else if (job_type==2)
             {
                 printf("\n------------------------------------------------------------\n");
@@ -229,12 +262,13 @@ int main()
                 printf("[CLIENT %d] Filename: ", pid);
                 fgets(filename, sizeof(filename), stdin);
                 filename[strcspn(filename, "\n")] = '\0';
+                
                 if (strcmp(filename, "exit") == 0)
                     break;
-                   
-                printf("Enter Priority (1-10, 5=highest): ");
-                scanf("%d", &priority);
-                getchar();
+                    
+                 printf("Enter Priority (1-5, 1=highest): ");
+                 scanf("%d", &priority);
+                 getchar();
                
                 printf("\n---------Now Enter Content of File---------\n");
                 printf("\nHeading: ");
@@ -249,7 +283,7 @@ int main()
                 if (strcmp(content, "exit") == 0)
                     break;
 
-                msg.job_type = 2;
+                msg.job_type = 2;  // Explicitly set job type to 2
                 strncpy(msg.mesfilename, filename, TEXT_LIMIT);
                 strncpy(msg.mesheading, heading, TEXT_LIMIT);
                 strncpy(msg.mescontent, content, TEXT_LIMIT);
