@@ -19,104 +19,111 @@ void init_queue()
     queue->front = 0;
     queue->rear = 0;
     queue->count = 0;
-    queue->current_algorithm = FCFS;         // default algorithm
+    queue->current_algorithm = FCFS;
     queue->rr_counter = 0;
 }
 
-void add_job_to_queue(Job new_job) 
+void view_log_file() {
+    printf("\n--- Current Queue Log ---\n");
+    FILE* log_fp = fopen("queue_log.txt", "r");
+    if (log_fp) {
+        char line[256];
+        while (fgets(line, sizeof(line), log_fp)) {
+            printf("%s", line);
+        }
+        fclose(log_fp);
+    } else {
+        perror("Error opening log file");
+    }
+    printf("------------------------\n");
+}
+
+void add_job_to_queue(Job new_job)
 {
     pthread_mutex_lock(&queue_mutex);
-    
-    if (queue->count == MAX_JOBS) 
+   
+    if (queue->count == MAX_JOBS)
     {
         pthread_cond_wait(&queue_not_full, &queue_mutex);
     }
-    
-    if (queue->current_algorithm == PRIORITY) 
+   
+    if (queue->current_algorithm == PRIORITY)
     {
-        // Insert in priority order (lowest number first)
         int insert_pos = queue->rear;
-        for (int i = 0; i < queue->count; i++) 
+        for (int i = 0; i < queue->count; i++)
         {
             int idx = (queue->front + i) % MAX_JOBS;
-            if (queue->jobs[idx].priority > new_job.priority) 
+            if (queue->jobs[idx].priority > new_job.priority)
             {
                 insert_pos = idx;
                 break;
             }
         }
-        
-        for (int i = queue->rear; i != insert_pos; i = (i - 1 + MAX_JOBS) % MAX_JOBS) 
+       
+        for (int i = queue->rear; i != insert_pos; i = (i - 1 + MAX_JOBS) % MAX_JOBS)
         {
             int prev = (i - 1 + MAX_JOBS) % MAX_JOBS;
             queue->jobs[i] = queue->jobs[prev];
         }
-        
+       
         queue->jobs[insert_pos] = new_job;
         queue->rear = (queue->rear + 1) % MAX_JOBS;
-    } 
-    else 
+    }
+    else
     {
-        // For FCFS and Round Robin, add to rear
         queue->jobs[queue->rear] = new_job;
         queue->rear = (queue->rear + 1) % MAX_JOBS;
     }
-    
+   
     queue->count++;
     pthread_cond_signal(&queue_not_empty);
     pthread_mutex_unlock(&queue_mutex);
-    
+   
     write_queue_to_log();
-    
+   
     printf("[SERVER] Added Job %d (Priority: %d, File: %s)\n",
            new_job.jobid, new_job.priority, new_job.filename);
 }
 
-
-
-int remove_job_from_queue(Job *job) 
+int remove_job_from_queue(Job *job)
 {
     pthread_mutex_lock(&queue_mutex);
-    while (queue->count == 0) 
+    while (queue->count == 0)
     {
         pthread_cond_wait(&queue_not_empty, &queue_mutex);
     }
 
-    // Default to FCFS if no algorithm is set
-    if (queue->current_algorithm == FCFS || queue->current_algorithm == 0) 
+    if (queue->current_algorithm == FCFS || queue->current_algorithm == 0)
     {
         *job = queue->jobs[queue->front];
         queue->front = (queue->front + 1) % MAX_JOBS;
         queue->count--;
     }
-    
-    else if (queue->current_algorithm == PRIORITY) 
+    else if (queue->current_algorithm == PRIORITY)
     {
-        // Find the job with highest priority (lowest number)
         int highest_prio_index = queue->front;
-        for (int i = 1; i < queue->count; i++) 
+        for (int i = 1; i < queue->count; i++)
         {
             int current_index = (queue->front + i) % MAX_JOBS;
-            if (queue->jobs[current_index].priority < queue->jobs[highest_prio_index].priority) 
+            if (queue->jobs[current_index].priority < queue->jobs[highest_prio_index].priority)
             {
                 highest_prio_index = current_index;
             }
         }
-        
+       
         *job = queue->jobs[highest_prio_index];
-        
-        for (int i = highest_prio_index; i != queue->rear; i = (i + 1) % MAX_JOBS) 
+       
+        for (int i = highest_prio_index; i != queue->rear; i = (i + 1) % MAX_JOBS)
         {
             int next = (i + 1) % MAX_JOBS;
             if (next == queue->rear) break;
             queue->jobs[i] = queue->jobs[next];
         }
-        
+       
         queue->rear = (queue->rear - 1 + MAX_JOBS) % MAX_JOBS;
         queue->count--;
     }
-    
-    else if (queue->current_algorithm == ROUND_ROBIN) 
+    else if (queue->current_algorithm == ROUND_ROBIN)
     {
         *job = queue->jobs[queue->front];
         queue->front = (queue->front + 1) % MAX_JOBS;
@@ -139,12 +146,11 @@ void* worker_thread(void* arg)
         printf("[THREAD %d] Processing Job ID = %d | Filename: %s \n\n",
          thread_id, job.jobid, job.filename);
        
-        if (job.job_type == 1)  // Existing file read job
+        if (job.job_type == 1)
         {
             printf("[THREAD %d] Existing file requested\n", thread_id);
             printf("[THREAD %d] Content: %s\n", thread_id, job.content);
         }
-       
         else if (job.job_type == 2)
         {
             printf("[THREAD %d] Creating new file: %s\n", thread_id, job.filename);
@@ -166,12 +172,11 @@ void* worker_thread(void* arg)
             }
         }  
        
-        // Send acknowledgment back to client
         char ack_msg[MSG_SIZE];
         snprintf(ack_msg, MSG_SIZE, "Job %d Completed by Thread %d", job.jobid, thread_id);
         send(job.client_socket, ack_msg, strlen(ack_msg), 0);
        
-        sleep(1); // Simulate processing time
+        sleep(1);
        
         if (strcmp(job.content, "exit") == 0)
         {
@@ -182,28 +187,24 @@ void* worker_thread(void* arg)
     return NULL;
 }
 
-
-void sort_queue_by_priority() 
+void sort_queue_by_priority()
 {
     if (queue->count <= 1) return;
 
-    // Convert circular queue to linear array 
     Job temp[MAX_JOBS];
     int temp_count = 0;
-    
-    // Copy jobs to temp array
-    for (int i = 0; i < queue->count; i++) 
+   
+    for (int i = 0; i < queue->count; i++)
     {
         int idx = (queue->front + i) % MAX_JOBS;
         temp[temp_count++] = queue->jobs[idx];
     }
-    
-    // Bubble sort by priority (lower number = higher priority)
-    for (int i = 0; i < temp_count - 1; i++) 
+   
+    for (int i = 0; i < temp_count - 1; i++)
     {
-        for (int j = 0; j < temp_count - i - 1; j++) 
+        for (int j = 0; j < temp_count - i - 1; j++)
         {
-            if (temp[j].priority > temp[j+1].priority) 
+            if (temp[j].priority > temp[j+1].priority)
             {
                 Job swap = temp[j];
                 temp[j] = temp[j+1];
@@ -211,24 +212,22 @@ void sort_queue_by_priority()
             }
         }
     }
-    
-    // Copy back to circular queue
+   
     queue->front = 0;
     queue->rear = temp_count;
     queue->count = temp_count;
-    for (int i = 0; i < temp_count; i++) 
+    for (int i = 0; i < temp_count; i++)
     {
         queue->jobs[i] = temp[i];
     }
 }
 
-
-void write_queue_to_log() 
+void write_queue_to_log()
 {
     pthread_mutex_lock(&queue_mutex);
-    
+   
     FILE* log_fp = fopen("queue_log.txt", "a");
-    if (!log_fp) 
+    if (!log_fp)
     {
         perror("Log File Error");
         pthread_mutex_unlock(&queue_mutex);
@@ -246,28 +245,26 @@ void write_queue_to_log()
            queue->current_algorithm == PRIORITY ? "Priority" : "Round Robin",
            queue->count);
 
-    if (queue->count > 0) 
+    if (queue->count > 0)
     {
         fprintf(log_fp, "Job ID\tPriority\tFilename\tClient\n");
         fprintf(log_fp, "--------------------------------------\n");
-        
-        // Create temporary array to preserve queue order
+       
         Job temp_jobs[MAX_JOBS];
         int count = 0;
-        for (int i = 0; i < queue->count; i++) 
+        for (int i = 0; i < queue->count; i++)
         {
             int idx = (queue->front + i) % MAX_JOBS;
             temp_jobs[count++] = queue->jobs[idx];
         }
-        
-        // Sort only for display if priority algorithm
-        if (queue->current_algorithm == PRIORITY) 
+       
+        if (queue->current_algorithm == PRIORITY)
         {
-            for (int i = 0; i < count-1; i++) 
+            for (int i = 0; i < count-1; i++)
             {
-                for (int j = 0; j < count-i-1; j++) 
+                for (int j = 0; j < count-i-1; j++)
                 {
-                    if (temp_jobs[j].priority > temp_jobs[j+1].priority) 
+                    if (temp_jobs[j].priority > temp_jobs[j+1].priority)
                     {
                         Job swap = temp_jobs[j];
                         temp_jobs[j] = temp_jobs[j+1];
@@ -276,8 +273,8 @@ void write_queue_to_log()
                 }
             }
         }
-        
-        for (int i = 0; i < count; i++) 
+       
+        for (int i = 0; i < count; i++)
         {
             fprintf(log_fp, "%d\t%d\t\t%s\t%d\n",
                    temp_jobs[i].jobid,
@@ -285,19 +282,18 @@ void write_queue_to_log()
                    temp_jobs[i].filename,
                    temp_jobs[i].client_socket);
         }
-    } 
-    else 
+    }
+    else
     {
         fprintf(log_fp, "Queue is empty\n");
     }
-    
+   
     fprintf(log_fp, "====== End Update ======\n");
     fclose(log_fp);
     pthread_mutex_unlock(&queue_mutex);
 }
 
-
-void set_scheduling_algorithm(int algorithm) 
+void set_scheduling_algorithm(int algorithm)
 {
     pthread_mutex_lock(&queue_mutex);
     queue->current_algorithm = algorithm;
@@ -305,17 +301,11 @@ void set_scheduling_algorithm(int algorithm)
     pthread_mutex_unlock(&queue_mutex);
    
     printf("\nScheduling Algorithm set to: ");
-    switch(algorithm) 
+    switch(algorithm)
     {
-        case FCFS: 
-        printf("First-Come-First-Serve\n"); 
-        break;
-        case ROUND_ROBIN: 
-        printf("Round Robin\n"); 
-        break;
-        case PRIORITY: 
-        printf("Priority\n"); 
-        break;
+        case FCFS: printf("First-Come-First-Serve\n"); break;
+        case ROUND_ROBIN: printf("Round Robin\n"); break;
+        case PRIORITY: printf("Priority\n"); break;
         default: printf("Unknown\n");
     }
 }
@@ -328,7 +318,6 @@ void* handle_client(void* arg)
    
     while (1)
     {
-        // Receive message from client
         int bytes_received = recv(client_socket, &msg, sizeof(msg), 0);
         if (bytes_received <= 0)
         {
@@ -336,7 +325,6 @@ void* handle_client(void* arg)
             break;
         }
        
-        // Parse the received message into a job
         Job new_job;
         new_job.jobid = job_id++;
         new_job.client_socket = client_socket;
@@ -344,23 +332,28 @@ void* handle_client(void* arg)
         new_job.priority = msg.priority;
         strcpy(new_job.filename, msg.mesfilename);
        
-        if (msg.job_type == 1)  // Existing file request
+        if (msg.job_type == 1)
         {
             FILE* fp = fopen(new_job.filename, "r");
-            if (fp == NULL)  // Fixed: Changed 'ioif' to 'if'
+            if (fp == NULL)
             {
                 char err_msg[] = "Error: File not found on server.";
                 send(client_socket, err_msg, strlen(err_msg), 0);
                 continue;
             }
 
-            // Read and send file content back to client
-            char buffer[MSG_SIZE] = {0};  // Fixed: Added buffer declaration
-            fread(buffer, 1, MSG_SIZE - 1, fp);
+            char buffer[MSG_SIZE] = {0};
+            size_t bytes_read = fread(buffer, 1, MSG_SIZE - 1, fp);
+            buffer[bytes_read] = '\0';
             fclose(fp);
+
+            if (bytes_read >= MSG_SIZE - 1) {
+                buffer[MSG_SIZE - 1] = '\0';
+                printf("Warning: File %s was truncated to fit buffer size\n", new_job.filename);
+            }
+           
             send(client_socket, buffer, strlen(buffer), 0);
 
-            // For queue logging
             strcpy(new_job.heading, "EXISTING FILE JOB");
             strcpy(new_job.content, buffer);
         }
@@ -369,11 +362,19 @@ void* handle_client(void* arg)
             strcpy(new_job.heading, msg.mesheading);
             strcpy(new_job.content, msg.mescontent);
         }
-        
-        add_job_to_queue(new_job);
-        //write_queue_to_log();
        
+        add_job_to_queue(new_job);
         printf("\n📥 [SERVER]: Job Received: ID = %d, Filename = %s\n",new_job.jobid, new_job.filename);
+
+        // Prompt to view log after adding job
+        printf("\nJob added. View log file? (1 = Yes, 0 = No): ");
+        int view_log;
+        scanf("%d", &view_log);
+        getchar();
+       
+        if (view_log == 1) {
+            view_log_file();
+        }
        
         if (strcmp(new_job.content, "exit") == 0)
         {
@@ -387,9 +388,6 @@ void* handle_client(void* arg)
     return NULL;
 }
 
-         
-
-
 void start_server()
 {
     printf("\nSelect Scheduling Algorithm:\n");
@@ -400,20 +398,18 @@ void start_server()
     int algorithm_choice;
     scanf("%d", &algorithm_choice);
     set_scheduling_algorithm(algorithm_choice);
-    
+   
     int server_fd, new_socket;
     struct sockaddr_in address;
     int opt = 1;
     int addrlen = sizeof(address);
    
-    // Create socket file descriptor
     if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0)
     {
         perror("socket failed");
         exit(EXIT_FAILURE);
     }
    
-    // Forcefully attach socket to the port
     if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt)))
     {
         perror("setsockopt");
@@ -424,7 +420,6 @@ void start_server()
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(PORT);
    
-    // Bind the socket to the port
     if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0)
     {
         perror("bind failed");
@@ -439,7 +434,6 @@ void start_server()
    
     printf("Server listening on port %d...\n", PORT);
    
-    // Start worker threads
     pthread_t workers[NUM_THREADS];
     int worker_ids[NUM_THREADS];
     for (int i = 0; i < NUM_THREADS; i++)
@@ -448,7 +442,6 @@ void start_server()
         pthread_create(&workers[i], NULL, worker_thread, &worker_ids[i]);
     }
    
-    // Accept incoming connections
     while (1)
     {
         if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0)
@@ -459,7 +452,6 @@ void start_server()
        
         printf("New connection from %s\n", inet_ntoa(address.sin_addr));
        
-        // Create a new thread for each client
         pthread_t thread_id;
         int *client_socket = malloc(sizeof(int));
         *client_socket = new_socket;
@@ -472,7 +464,7 @@ void start_server()
        
         pthread_detach(thread_id);
     }
-  
+ 
     for (int i = 0; i < NUM_THREADS; i++)
     {
         pthread_join(workers[i], NULL);
@@ -495,4 +487,3 @@ int main()
    
     return 0;
 }
-
