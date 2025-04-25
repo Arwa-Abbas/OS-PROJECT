@@ -8,7 +8,7 @@
 
 #define TEXT_LIMIT 512
 #define MAX_ACCOUNTS 10
-
+ 
 struct Account
 {
 char username[TEXT_LIMIT];
