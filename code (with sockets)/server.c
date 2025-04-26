@@ -20,6 +20,9 @@ int frame_queue[NUM_FRAMES] = {-1};
 int frame_queue_front=0;
 int frame_queue_rear=0;
 
+//READER & WRITER PROBLEM (DEADLOCK)
+pthread_rwlock_t queue_rwlock = PTHREAD_RWLOCK_INITIALIZER;
+
 pthread_mutex_t queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t queue_not_empty = PTHREAD_COND_INITIALIZER;
 pthread_cond_t queue_not_full = PTHREAD_COND_INITIALIZER;
@@ -44,12 +47,18 @@ void add_job_to_queue(Job new_job)
 {
     //pthread_mutex_lock(&queue_mutex);
     sem_wait(&queue_binary_sem);
+      printf("Acquiring WRITE lock (add)\n");
+    pthread_rwlock_wrlock(&queue_rwlock);
+   
     new_job.arrival_time = time(NULL);
     if (queue->count == MAX_JOBS)
     {
-       sem_post(&queue_binary_sem);
+    printf("Queue full, waiting for space\n");
+       pthread_rwlock_unlock(&queue_rwlock);
+        sem_post(&queue_binary_sem);
         pthread_cond_wait(&queue_not_full, &queue_mutex);
-         sem_wait(&queue_binary_sem);
+        sem_wait(&queue_binary_sem);
+        pthread_rwlock_wrlock(&queue_rwlock);
     }
    
     if (queue->current_algorithm == PRIORITY)
@@ -83,7 +92,8 @@ void add_job_to_queue(Job new_job)
     }
    
     queue->count++;
-    sem_post(&queue_count_sem);    
+     sem_post(&queue_count_sem);
+    pthread_rwlock_unlock(&queue_rwlock);
     sem_post(&queue_binary_sem);
     pthread_cond_signal(&queue_not_empty);
     //pthread_mutex_unlock(&queue_mutex);
@@ -100,10 +110,16 @@ int remove_job_from_queue(Job *job)
 {
     sem_wait(&queue_count_sem);    
     //sem_wait(&queue_binary_sem);
-    pthread_mutex_lock(&queue_mutex);
+    printf("LOCKING RWLock (write mode)\n");
+     pthread_rwlock_wrlock(&queue_rwlock);
+    //pthread_mutex_lock(&queue_mutex);
     while (queue->count == 0)
     {
+        printf("Queue empty, waiting for jobs\n");
+        //pthread_cond_wait(&queue_not_empty, &queue_mutex);
+         pthread_rwlock_unlock(&queue_rwlock);
         pthread_cond_wait(&queue_not_empty, &queue_mutex);
+        pthread_rwlock_wrlock(&queue_rwlock);
     }
 
     // Default to FCFS if no algorithm is set
@@ -150,7 +166,9 @@ int remove_job_from_queue(Job *job)
     //queue->count--;
     //sem_post(&queue_binary_sem);
     pthread_cond_signal(&queue_not_full);
-   pthread_mutex_unlock(&queue_mutex);
+    printf("[UNLOCKING RWLock (write done)\n");
+     pthread_rwlock_unlock(&queue_rwlock);
+   //pthread_mutex_unlock(&queue_mutex);
     return 1;
 }
 
@@ -218,11 +236,8 @@ void* worker_thread(void* arg)
                 perror("Error creating file");
                 printf("[THREAD %d] Error creating file %s.\n", thread_id, job.filename);
             }
-           
-           
-        }
-       
-       
+                   
+        }        
         else if (job.job_type == 2)
         {
             printf("[THREAD %d] Creating new file: %s\n", thread_id, job.filename);
@@ -263,6 +278,7 @@ void* worker_thread(void* arg)
 
 void sort_queue_by_priority()
 {
+pthread_rwlock_wrlock(&queue_rwlock);
     if (queue->count <= 1) return;
 
     // Convert circular queue to linear array
@@ -298,13 +314,15 @@ void sort_queue_by_priority()
     {
         queue->jobs[i] = temp[i];
     }
+     pthread_rwlock_unlock(&queue_rwlock);
 }
 
 void write_queue_to_log()
 {
-    sem_wait(&queue_binary_sem);
-    pthread_mutex_lock(&queue_mutex);
-   
+    //sem_wait(&queue_binary_sem);
+    //pthread_mutex_lock(&queue_mutex);
+   printf("\nLOCKING RWLock (read mode)\n");
+    pthread_rwlock_rdlock(&queue_rwlock);
     FILE* log_fp = fopen("queue_log.txt", "a");
     if (!log_fp)
     {
@@ -389,8 +407,10 @@ void write_queue_to_log()
    
     fprintf(log_fp, "====== End Update ======\n");
     fclose(log_fp);
-    pthread_mutex_unlock(&queue_mutex);
-     sem_post(&queue_binary_sem);
+      printf("\nUNLOCKING RWLock (read done)\n");
+     pthread_rwlock_unlock(&queue_rwlock);
+    //pthread_mutex_unlock(&queue_mutex);
+    // sem_post(&queue_binary_sem);
 }
 
 
@@ -615,6 +635,7 @@ int main()
            NUM_FRAMES, (NUM_FRAMES * PAGE_SIZE) / 1024);
     start_server();
    
+     pthread_rwlock_destroy(&queue_rwlock);
     sem_destroy(&queue_binary_sem);
     sem_destroy(&queue_count_sem);
     return 0;
