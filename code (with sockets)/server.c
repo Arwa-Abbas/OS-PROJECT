@@ -4,19 +4,28 @@
 #include <stdbool.h>
 #include <errno.h>
 #include <time.h>
+#include <semaphore.h>
 
 #define NUM_THREADS 4
 
 JobQueue *queue = NULL;
 
-// Virtual Memory Globals
+// Virtual Memory Global Variables
 JobMemory *job_memories[MAX_JOBS] = {NULL};
 char phys_mem[NUM_FRAMES][PAGE_SIZE];
 int used_frames = 0;
 
+//FIFO REPLACEMENT ALGO
+int frame_queue[NUM_FRAMES] = {-1};  
+int frame_queue_front=0;
+int frame_queue_rear=0;
+
 pthread_mutex_t queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t queue_not_empty = PTHREAD_COND_INITIALIZER;
 pthread_cond_t queue_not_full = PTHREAD_COND_INITIALIZER;
+
+sem_t queue_binary_sem;  
+sem_t queue_count_sem;
 
 void init_queue()
 {
@@ -24,17 +33,23 @@ void init_queue()
     queue->front = 0;
     queue->rear = 0;
     queue->count = 0;
-    queue->current_algorithm = FCFS;         // default algorithm
+    queue->current_algorithm=FCFS;         // default algorithm
     queue->rr_counter = 0;
+   
+    sem_init(&queue_binary_sem, 0, 1);
+    sem_init(&queue_count_sem, 0, 0);
 }
 
 void add_job_to_queue(Job new_job)
 {
-    pthread_mutex_lock(&queue_mutex);
+    //pthread_mutex_lock(&queue_mutex);
+    sem_wait(&queue_binary_sem);
     new_job.arrival_time = time(NULL);
     if (queue->count == MAX_JOBS)
     {
+       sem_post(&queue_binary_sem);
         pthread_cond_wait(&queue_not_full, &queue_mutex);
+         sem_wait(&queue_binary_sem);
     }
    
     if (queue->current_algorithm == PRIORITY)
@@ -68,8 +83,10 @@ void add_job_to_queue(Job new_job)
     }
    
     queue->count++;
+    sem_post(&queue_count_sem);    
+    sem_post(&queue_binary_sem);
     pthread_cond_signal(&queue_not_empty);
-    pthread_mutex_unlock(&queue_mutex);
+    //pthread_mutex_unlock(&queue_mutex);
    
     write_queue_to_log();
    
@@ -81,6 +98,8 @@ void add_job_to_queue(Job new_job)
 
 int remove_job_from_queue(Job *job)
 {
+    sem_wait(&queue_count_sem);    
+    //sem_wait(&queue_binary_sem);
     pthread_mutex_lock(&queue_mutex);
     while (queue->count == 0)
     {
@@ -127,15 +146,17 @@ int remove_job_from_queue(Job *job)
         queue->front = (queue->front + 1) % MAX_JOBS;
         queue->count--;
     }
-
+ 
+    //queue->count--;
+    //sem_post(&queue_binary_sem);
     pthread_cond_signal(&queue_not_full);
-    pthread_mutex_unlock(&queue_mutex);
+   pthread_mutex_unlock(&queue_mutex);
     return 1;
 }
 
 void view_log_file()
 {
-    printf("\n--- Current Queue Log ---\n");
+    printf("\n--- CURRENT QUEUE LOG ---\n");
     FILE* log_fp = fopen("queue_log.txt", "r");
    
     if (log_fp)
@@ -149,7 +170,7 @@ void view_log_file()
     }
     else
     {
-        perror("Error opening log file");
+        perror("Error opening queue log file");
     }
     printf("------------------------\n");
 }
@@ -159,15 +180,14 @@ void* worker_thread(void* arg)
 {
     int thread_id = *(int*)arg;
     Job job;
-    time_t start = time(NULL);
     while (1)
     {
         remove_job_from_queue(&job);
 
-// ====== NEW: LOAD JOB PAGES INTO PHYSICAL MEMORY ======
         JobMemory *job_mem = job_memories[job.jobid % MAX_JOBS];
-        if (!job_mem) {
-            printf("[THREAD %d] ERROR: No memory allocated for Job %d!\n", thread_id, job.jobid);
+        if (!job_mem)
+        {
+            printf("[THREAD %d] ERROR: No memory Allocated for Job %d!\n", thread_id, job.jobid);
             continue;
         }
 
@@ -184,7 +204,7 @@ void* worker_thread(void* arg)
        
          if (job.job_type == 1)  // Existing file content received from client
         {
-         printf("[THREAD %d] Created a copy of client file: %s\n", thread_id, job.filename);
+         printf("[THREAD %d] Created a copy of client's existing file: %s\n", thread_id, job.filename);
              printf("[THREAD %d] Content: %s\n", thread_id, job.content);
              FILE *fp = fopen(job.filename, "w");
             if (fp != NULL)
@@ -229,11 +249,8 @@ void* worker_thread(void* arg)
         snprintf(ack_msg, MSG_SIZE, "Job %d Completed by Thread %d", job.jobid, thread_id);
         send(job.client_socket, ack_msg, strlen(ack_msg), 0);
        
-        sleep(1); // Simulate processing time
-        time_t end = time(NULL);
-        job.completion_time = end;
-        job.execution_time = (int)difftime(end, start);
-       
+        sleep(1); // Simulate processing tim
+     
         if (strcmp(job.content, "exit") == 0)
         {
             printf("[THREAD %d] Received exit signal. Exiting...\n", thread_id);
@@ -285,6 +302,7 @@ void sort_queue_by_priority()
 
 void write_queue_to_log()
 {
+    sem_wait(&queue_binary_sem);
     pthread_mutex_lock(&queue_mutex);
    
     FILE* log_fp = fopen("queue_log.txt", "a");
@@ -292,6 +310,7 @@ void write_queue_to_log()
     {
         perror("Log File Error");
         pthread_mutex_unlock(&queue_mutex);
+         sem_post(&queue_binary_sem);
         return;
     }
 
@@ -300,7 +319,7 @@ void write_queue_to_log()
     char time_str[100];
     strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", t);
 
-    fprintf(log_fp, "\n====== Queue State at %s ======\n", time_str);
+    fprintf(log_fp, "\n====== QUEUE STATE AT %s ======\n", time_str);
     fprintf(log_fp, "Algorithm: %s | Total Jobs: %d\n",
            queue->current_algorithm == FCFS ? "FCFS" :
            queue->current_algorithm == PRIORITY ? "Priority" : "Round Robin",
@@ -308,7 +327,7 @@ void write_queue_to_log()
 
     if (queue->count > 0)
     {
-        fprintf(log_fp, "Client\tJob ID\tPriority\tFilename\tArrival\t\tCompletion\t\n");
+        fprintf(log_fp, "Client\tJob ID\tPriority\tFilename\tArrival\t\tStatus\n");
         fprintf(log_fp, "-------------------------------------------------------------------------------\n");
        
         Job temp_jobs[MAX_JOBS];
@@ -338,20 +357,20 @@ void write_queue_to_log()
         for (int i = 0; i < count; i++)
         {
             char arrival[30] = "N/A";
-            char completion[30] = "Pending";
-            int turnaround_time = -1;
-            int waiting_time = -1;
+            char completion[30] = "N/A";
+            char* status = "Pending";
            
             if (temp_jobs[i].arrival_time > 0)
             {
                 strftime(arrival, sizeof(arrival), "%H:%M:%S",
                         localtime(&temp_jobs[i].arrival_time));
-               
-                if (temp_jobs[i].completion_time > 0)
-                {
-                    strftime(completion, sizeof(completion), "%H:%M:%S",
-                            localtime(&temp_jobs[i].completion_time));
-                }
+            }
+           
+            if (temp_jobs[i].completion_time > 0)
+            {
+                strftime(completion, sizeof(completion), "%H:%M:%S",
+                        localtime(&temp_jobs[i].completion_time));
+                status = "Completed";
             }
            
             fprintf(log_fp, "%d\t%d\t%d\t\t%s\t%s\t%s\n",
@@ -360,7 +379,7 @@ void write_queue_to_log()
                    temp_jobs[i].priority,
                    temp_jobs[i].filename,
                    arrival,
-                   completion);
+                   status);
         }
     }
     else
@@ -371,6 +390,7 @@ void write_queue_to_log()
     fprintf(log_fp, "====== End Update ======\n");
     fclose(log_fp);
     pthread_mutex_unlock(&queue_mutex);
+     sem_post(&queue_binary_sem);
 }
 
 
@@ -587,11 +607,15 @@ int main()
     printf("🖨️  Server is now online and ready to receive print jobs.....\n📡  Waiting for client connections...\n\n");
    
     init_queue();
-    memset(phys_mem, 0, sizeof(phys_mem));  // Clear physical memory
+   
+    memset(frame_queue, -1, sizeof(frame_queue));  
+    memset(phys_mem, 0, sizeof(phys_mem));     // Clear physical memory
+   
     printf("Virtual Memory Ready: %d frames (%d KB total)\n",
            NUM_FRAMES, (NUM_FRAMES * PAGE_SIZE) / 1024);
     start_server();
    
+    sem_destroy(&queue_binary_sem);
+    sem_destroy(&queue_count_sem);
     return 0;
 }
-
