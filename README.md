@@ -16,12 +16,12 @@ Resource Heirachy Dealock: dining philospher critical problem implemented.
 - **Memory**: Simulated virtual memory system
 
 ## Compilation:
-gcc -o server server.c memory.c -lpthread
-gcc -o client client.c -lpthread
-or
-gcc server.c memory.c -o server
-gcc client.c -o client
+- gcc -o server server.c memory.c -lpthread
+- gcc -o client client.c -lpthread
+- or
+- gcc server.c memory.c -o server
+- gcc client.c -o client
 
 # Run (in separate terminals)
-./server 
-./client (can run multiple)
+- ./server 
+- ./client (can run multiple)
