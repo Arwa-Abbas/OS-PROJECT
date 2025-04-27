@@ -21,7 +21,7 @@ int num_accounts=0;
 // Load accounts from file
 void load_accounts()
 {
-    FILE *file = fopen("accounts.txt", "r");
+    FILE *file = fopen("accounts.txt","r");
     if (file == NULL) return;
     while (fscanf(file, "%s %s", accounts[num_accounts].username, accounts[num_accounts].password) == 2)
     {
@@ -31,7 +31,7 @@ void load_accounts()
     fclose(file);
 }
 
-// Save a new account to file
+// save a new account to file
 void save_account(const char *username, const char *password)
 {
     FILE *file = fopen("accounts.txt", "a");
@@ -64,7 +64,7 @@ int create_account(char *username, char *password)
         return 0;
     }
 
-    // Check if the username already exists
+    // check if the username already exists
     for (int i = 0; i < num_accounts; i++)
     {
         if (strcmp(accounts[i].username, username) == 0)
@@ -215,24 +215,24 @@ int main()
             strncpy(msg.mesfilename, filename, TEXT_LIMIT);
             msg.job_type = 1;
            
-    // Read file content
-    FILE *file = fopen(filename, "r");
-    if (file == NULL) {
-        perror("Error opening file");
-        printf("[CLIENT %d] Could not open file: %s\n", pid, filename);
-        continue;  // Skip to next iteration
-    }
+            // read file content
+           FILE *file = fopen(filename, "r");
+           if (file == NULL) {
+           perror("Error opening file");
+           printf("[CLIENT %d] Could not open file: %s\n", pid, filename);
+           continue;  // Skip to next iteration
+           }
 
-    // Get file size
-    fseek(file, 0, SEEK_END);
-    long file_size = ftell(file);
-    fseek(file, 0, SEEK_SET);
+           // Get file size
+           fseek(file, 0, SEEK_END);
+           long file_size = ftell(file);
+           fseek(file, 0, SEEK_SET);
 
-    // Read file content
-    char *file_content = (char*)malloc(file_size + 1);
-    size_t bytes_read = fread(file_content, 1, file_size, file);
-    file_content[bytes_read] = '\0';
-    fclose(file);
+  
+           char *file_content = (char*)malloc(file_size + 1);
+           size_t bytes_read = fread(file_content, 1, file_size, file);
+            file_content[bytes_read] = '\0';
+            fclose(file);
 
               int priority;
               printf("Enter Priority (1-5, 1=highest): ");
@@ -283,7 +283,7 @@ int main()
                 if (strcmp(content, "exit") == 0)
                     break;
 
-                msg.job_type = 2;  // Explicitly set job type to 2
+                msg.job_type = 2;  
                 strncpy(msg.mesfilename, filename, TEXT_LIMIT);
                 strncpy(msg.mesheading, heading, TEXT_LIMIT);
                 strncpy(msg.mescontent, content, TEXT_LIMIT);
@@ -302,6 +302,5 @@ int main()
         }
     }  
     close(sock);
-    //free_pages(getpid());
     return 0;
 }
