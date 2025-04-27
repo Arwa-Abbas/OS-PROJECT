@@ -1,3 +1,4 @@
+
 #include "communication.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,6 +10,7 @@
 #define TEXT_LIMIT 512
 #define MAX_ACCOUNTS 10
 
+//Account Structure
 struct Account
 {
 char username[TEXT_LIMIT];
@@ -91,6 +93,7 @@ int main()
         return -1;
     }
    
+    //set server address parameters
     serv_addr.sin_family=AF_INET;
     serv_addr.sin_port=htons(PORT);
    
@@ -99,12 +102,14 @@ int main()
     scanf("%15s",server_ip);
     getchar();
    
+    // convert ip to binary form
     if (inet_pton(AF_INET, server_ip, &serv_addr.sin_addr) <= 0)
     {
         printf("\nInvalid address/ Address not supported \n");
         return -1;
     }
    
+    //connect to server
     if (connect(sock,(struct sockaddr *)&serv_addr,sizeof(serv_addr))<0)
     {
         printf("\nConnection Failed \n");
@@ -202,6 +207,7 @@ int main()
              getchar();
              
              if (job_type == 1) {
+            //handle existing file submission
             printf("\n------------------------------------------------------------\n");
             char filename[TEXT_LIMIT];
             printf("[CLIENT %d] filename: ", pid);
@@ -250,7 +256,7 @@ int main()
             read(sock, buffer, MSG_SIZE);
             printf("[CLIENT %d] Server Response: %s\n", pid, buffer);
         }
-           
+            //new file creation
             else if (job_type==2)
             {
                 printf("\n------------------------------------------------------------\n");
@@ -283,6 +289,7 @@ int main()
                 if (strcmp(content, "exit") == 0)
                     break;
 
+                //prepare and send messages
                 msg.job_type = 2;  
                 strncpy(msg.mesfilename, filename, TEXT_LIMIT);
                 strncpy(msg.mesheading, heading, TEXT_LIMIT);
@@ -301,6 +308,6 @@ int main()
             printf("Invalid option. Please try again.\n");
         }
     }  
-    close(sock);
+    close(sock); //close sockets
     return 0;
 }
