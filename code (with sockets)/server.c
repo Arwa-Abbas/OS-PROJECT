@@ -6,7 +6,7 @@
 #include <time.h>
 #include <semaphore.h>
 
-#define NUM_THREADS 5
+#define NUM_THREADS 5    //worker threads in threadpool
 
 #define NUM_RESOURCES 5    
 
@@ -33,43 +33,46 @@ pthread_cond_t queue_not_full = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t printing_resources[NUM_RESOURCES];
 
 sem_t queue_binary_sem;  
-sem_t queue_count_sem; 
+sem_t queue_count_sem;
 
- Resource resources[5] = 
+ Resource resources[5] =
     {
     {0, "Print Head", 0, -1},  
     {1, "Ink Cartilage", 0, -1},  
     {2, "Paper Tray", 0, -1},  
     {3, "Power Supply", 0, -1},  
-    {4, "Network Interface", 0, -1}   
+    {4, "Network Interface", 0, -1}  
     };
 
 
 void init_queue()
 {
     queue = (JobQueue*)malloc(sizeof(JobQueue));
-    queue->front = 0;
+    queue->front = 0;                      //circular queue pointers
     queue->rear = 0;
     queue->count = 0;
     queue->current_algorithm=FCFS;         // default algorithm
-    
-    sem_init(&queue_binary_sem, 0, 1); 
+   
+    //synchronization primitives
+    sem_init(&queue_binary_sem, 0, 1);
     sem_init(&queue_count_sem, 0, 0);
 }
 
+//add new job to queue with thread safe operations
 void add_job_to_queue(Job new_job)
 {
-    sem_wait(&queue_binary_sem); 
+    sem_wait(&queue_binary_sem);
     printf("Acquiring WRITE lock (add)\n");
     pthread_rwlock_wrlock(&queue_rwlock);
-    
+   
     new_job.arrival_time = time(NULL);
+   
     if (queue->count == MAX_JOBS)
     {
     printf("Queue full, waiting for space\n");
        pthread_rwlock_unlock(&queue_rwlock);
         sem_post(&queue_binary_sem);
-        pthread_cond_wait(&queue_not_full, &queue_mutex);
+        pthread_cond_wait(&queue_not_full, &queue_mutex);     //wait until space avaliable
         sem_wait(&queue_binary_sem);
         pthread_rwlock_wrlock(&queue_rwlock);
     }
@@ -88,12 +91,14 @@ void add_job_to_queue(Job new_job)
             }
         }
        
+        //shift jobs to make space for new jobs
         for (int i = queue->rear; i != insert_pos; i = (i - 1 + MAX_JOBS) % MAX_JOBS)
         {
             int prev = (i - 1 + MAX_JOBS) % MAX_JOBS;
             queue->jobs[i] = queue->jobs[prev];
         }
        
+        //insert new job
         queue->jobs[insert_pos] = new_job;
         queue->rear = (queue->rear + 1) % MAX_JOBS;
     }
@@ -103,12 +108,14 @@ void add_job_to_queue(Job new_job)
         queue->rear = (queue->rear + 1) % MAX_JOBS;
     }
    
+    //update queue state and signal waiting threads
     queue->count++;
-     sem_post(&queue_count_sem);
+    sem_post(&queue_count_sem);
     pthread_rwlock_unlock(&queue_rwlock);
     sem_post(&queue_binary_sem);
     pthread_cond_signal(&queue_not_empty);
    
+    //log queue state
     write_queue_to_log();
    
     printf("[SERVER] Added Job %d (Priority: %d, File: %s)\n",
@@ -116,13 +123,14 @@ void add_job_to_queue(Job new_job)
 }
 
 
-
+//removes and return next job from queue
 int remove_job_from_queue(Job *job)
 {
-    sem_wait(&queue_count_sem);     
+    sem_wait(&queue_count_sem);         //waits for available jobs
     printf("LOCKING RWLock (write mode)\n");
      pthread_rwlock_wrlock(&queue_rwlock);
 
+    //handle empty queue condition
     while (queue->count == 0)
     {
         printf("Queue empty, waiting for jobs\n");
@@ -165,12 +173,13 @@ int remove_job_from_queue(Job *job)
         queue->count--;
     }
    
-    pthread_cond_signal(&queue_not_full);
-    printf("[UNLOCKING RWLock (write done)\n");
+    pthread_cond_signal(&queue_not_full);       //notify producer of space
+    printf("\n[UNLOCKING RWLock (write done)\n");
     pthread_rwlock_unlock(&queue_rwlock);
     return 1;
 }
 
+//display current queue log file
 void view_log_file()
 {
     printf("\n--- CURRENT QUEUE LOG ---\n");
@@ -193,6 +202,7 @@ void view_log_file()
 }
 
 
+//worker thread function that process job from queue
 void* worker_thread(void* arg)
 {
     int thread_id = *(int*)arg;
@@ -201,47 +211,50 @@ void* worker_thread(void* arg)
     while (1)
     {
         remove_job_from_queue(&job);
-        
+       
+        //resource allocation using dining philospher
         int res1 = thread_id % NUM_RESOURCES;
         int res2 = (thread_id + 1) % NUM_RESOURCES;
-        
-        // lock lower-numbered resource first
+       
+        // lock lower-numbered resource first to prevent deadlock
         int first = (res1 < res2) ? res1 : res2;
         int second = (res1 < res2) ? res2 : res1;  
 
-        printf("[THREAD %d] Attempting Resources %d→%d\n", thread_id, first, second);
-        
+        printf("\n[THREAD %d] Attempting Resources %d→%d\n", thread_id, first, second);
+       
         pthread_mutex_lock(&printing_resources[first]);
         printf("[THREAD %d] Acquired %s\n", thread_id, resources[first].resource_name);
-        
+       
         pthread_mutex_lock(&printing_resources[second]);
         printf("[THREAD %d] Acquired %s - READY\n", thread_id, resources[second].resource_name);
 
+        //update resource allocation status
         resources[first].is_allocated = 1;
         resources[first].job_id = job.jobid;
         resources[second].is_allocated = 1;
         resources[second].job_id = job.jobid;
-        
+       
+        //handle job memory
         JobMemory *job_mem = job_memories[job.jobid % MAX_JOBS];
          
-        if (!job_mem) 
+        if (!job_mem)
         {
             printf("[THREAD %d] ERROR: No memory for Job %d\n", thread_id, job.jobid);
-        } 
-        else 
+        }
+        else
         {
-            load_job_pages_into_memory(job, thread_id);
+            load_job_pages_into_memory(job, thread_id);  //virtual memory management
  
             printf("\n[THREAD %d] PRINTING JOB %d: %s (Using Resources %s & %s)\n",
                   thread_id, job.jobid, job.filename, resources[first].resource_name, resources[second].resource_name);
-            sleep(1); 
+            sleep(3);
         }
 
-      
+        //release resources
         pthread_mutex_unlock(&printing_resources[second]);
         pthread_mutex_unlock(&printing_resources[first]);
-        printf("[THREAD %d] Released %d→%d\n", thread_id, second, first);
-              
+        printf("\n[THREAD %d] Released %d→%d\n", thread_id, second, first);
+             
          if (job.job_type == 1)  // Existing file content received from client
         {
          printf("[THREAD %d] Created a copy of client's existing file: %s\n", thread_id, job.filename);
@@ -258,8 +271,9 @@ void* worker_thread(void* arg)
                 perror("Error creating file");
                 printf("[THREAD %d] Error creating file %s.\n", thread_id, job.filename);
             }
-                    
-        }         
+                   
+        }  
+        //new file job      
         else if (job.job_type == 2)
         {
             printf("[THREAD %d] Creating new file: %s\n", thread_id, job.filename);
@@ -287,7 +301,7 @@ void* worker_thread(void* arg)
         send(job.client_socket, ack_msg, strlen(ack_msg), 0);
        
         sleep(1); // Simulate processing tim
-      
+     
         if (strcmp(job.content, "exit") == 0)
         {
             printf("[THREAD %d] Received exit signal. Exiting...\n", thread_id);
@@ -339,10 +353,11 @@ pthread_rwlock_wrlock(&queue_rwlock);
      pthread_rwlock_unlock(&queue_rwlock);
 }
 
+//logs current queue status to file
 void write_queue_to_log()
 {
    printf("\nLOCKING RWLock (read mode)\n");
-    pthread_rwlock_rdlock(&queue_rwlock); 
+    pthread_rwlock_rdlock(&queue_rwlock);       //acquire readlock
     FILE* log_fp = fopen("queue_log.txt", "a");
     if (!log_fp)
     {
@@ -352,11 +367,13 @@ void write_queue_to_log()
         return;
     }
 
+    //get current timestamp
     time_t now = time(NULL);
     struct tm* t = localtime(&now);
     char time_str[100];
     strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", t);
 
+    //queue header
     fprintf(log_fp, "\n====== QUEUE STATE AT %s ======\n", time_str);
     fprintf(log_fp, "Algorithm: %s | Total Jobs: %d\n",
            queue->current_algorithm == FCFS ? "FCFS" :
@@ -364,9 +381,11 @@ void write_queue_to_log()
 
     if (queue->count > 0)
     {
+        //job header
         fprintf(log_fp, "Client\tJob ID\tPriority\tFilename\tArrival\t\tStatus\n");
         fprintf(log_fp, "-------------------------------------------------------------------------------\n");
        
+        //temp array for sorting if needed
         Job temp_jobs[MAX_JOBS];
         int count = 0;
         for (int i = 0; i < queue->count; i++)
@@ -402,7 +421,7 @@ void write_queue_to_log()
                 strftime(arrival, sizeof(arrival), "%H:%M:%S",
                         localtime(&temp_jobs[i].arrival_time));
             }
-            
+           
             if (temp_jobs[i].completion_time > 0)
             {
                 strftime(completion, sizeof(completion), "%H:%M:%S",
@@ -430,7 +449,7 @@ void write_queue_to_log()
      pthread_rwlock_unlock(&queue_rwlock);
 }
 
-
+//scheduling algorithm for queue
 void set_scheduling_algorithm(int algorithm)
 {
     pthread_mutex_lock(&queue_mutex);
@@ -450,11 +469,12 @@ void set_scheduling_algorithm(int algorithm)
     }
 }
 
+//communication with client
 void* handle_client(void* arg)
 {
     int client_socket = *(int*)arg;
     struct message msg;
-    int job_id = 1;
+    static int job_id = 1;    //counter for job ids
    
     while (1)
     {
@@ -466,7 +486,7 @@ void* handle_client(void* arg)
             break;
         }
        
-        // Parse the received message into a job
+        // parse the received message into a job
         Job new_job;
         new_job.jobid = job_id++;
         new_job.client_socket = client_socket;
@@ -476,11 +496,13 @@ void* handle_client(void* arg)
        
     JobMemory *job_mem = malloc(sizeof(JobMemory));
     job_mem->job_id = new_job.jobid;
+   
     for (int i = 0; i < PAGES_PER_JOB; i++)
     {
         job_mem->pages[i].frame = -1;  
         job_mem->pages[i].is_modified = 0;
     }
+   
     job_memories[new_job.jobid % MAX_JOBS] = job_mem;
     printf("[SERVER] Allocated %d pages for Job %d\n", PAGES_PER_JOB, new_job.jobid);
        
@@ -535,8 +557,6 @@ void* handle_client(void* arg)
     free(arg);
     return NULL;
 }
-
-         
 
 
 void start_server()
@@ -605,7 +625,7 @@ void start_server()
             exit(EXIT_FAILURE);
         }
        
-        printf("New connection from %s\n", inet_ntoa(address.sin_addr));
+        printf("\nNew connection from %s\n", inet_ntoa(address.sin_addr));
        
         // Create a new thread for each client
         pthread_t thread_id;
@@ -636,12 +656,13 @@ int main()
     printf("\t\t\t\tMULTI-USER PRINT SERVER");
     printf("\n\n===========================================================================================\n");
     printf("-------------------------------------------------------------------------------------------\n\n");
+    printf("\nMADE BY:\n23K-0721\n23K-0700\n23K-0824\n23K-0585\n\n");
     printf("🖨️  Server is now online and ready to receive print jobs.....\n📡  Waiting for client connections...\n\n");
    
     init_queue();
-    
+   
     // Initialize printing resources
-    for (int i = 0; i < NUM_RESOURCES; i++) 
+    for (int i = 0; i < NUM_RESOURCES; i++)
     {
     pthread_mutex_init(&printing_resources[i], NULL);
     }
@@ -653,13 +674,13 @@ int main()
     start_server();
    
     // Cleanup printing resources
-    for (int i = 0; i < NUM_RESOURCES; i++) 
+    for (int i = 0; i < NUM_RESOURCES; i++)
     {
     pthread_mutex_destroy(&printing_resources[i]);
     }
 
     pthread_rwlock_destroy(&queue_rwlock);
-    
+   
     sem_destroy(&queue_binary_sem);
     sem_destroy(&queue_count_sem);
     return 0;
