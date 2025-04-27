@@ -1,3 +1,4 @@
+
 #ifndef COMMUNICATION_H
 #define COMMUNICATION_H
 
@@ -15,7 +16,7 @@
 #define PAGES_PER_JOB 4  
 
 // job info
-#define MAX_JOBS 10
+#define MAX_JOBS 20
 #define MSG_SIZE 512
 #define PORT 8080               // server listening port
 #define MAX_CLIENTS 5
