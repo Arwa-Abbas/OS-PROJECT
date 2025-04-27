@@ -6,51 +6,51 @@
 #include <string.h>
 #include <unistd.h>
 #include <pthread.h>
-#include <sys/socket.h>        // Socket functions
-#include <netinet/in.h>        // sockaddr_in structure
+#include <sys/socket.h>          // socket functions
+#include <netinet/in.h>          // sockaddr_in structure
 #include <arpa/inet.h>
 
 #define NUM_FRAMES 8        
-#define PAGE_SIZE 4096        // 4KB per page
+#define PAGE_SIZE 4096         // 4KB per page 
 #define PAGES_PER_JOB 4  
 
-// JOB INFO
-#define MAX_JOBS 2
+// job info
+#define MAX_JOBS 10
 #define MSG_SIZE 512
-#define PORT 8080              // Server listening port
-#define MAX_CLIENTS 10
+#define PORT 8080               // server listening port
+#define MAX_CLIENTS 5
 
-// Scheduling algorithms
+// scheduling algorithms
 #define FCFS 1
-#define ROUND_ROBIN 2
-#define PRIORITY 3
+#define PRIORITY 2
 
 
-// Page table entry
-typedef struct
+// page table entry
+typedef struct 
 {
-    int frame;          // Physical frame number (-1 if not in memory)
-    int is_used;        // 1 if page is allocated, 0 if free
-    int is_modified;    // For tracking if data was changed
+    int frame;            // physical frame number (-1 if not in memory)
+    int is_used;          // 1 if page is allocated, 0 if it is free
+    int is_modified;      // for tracking if whether data was changed
 } PageTableEntry;
 
 
-typedef struct
+typedef struct 
 {
-PageTableEntry pages[PAGES_PER_JOB];  // Each job has fixed pages
+PageTableEntry pages[PAGES_PER_JOB];     
     int job_id;                           // Links to Job struct
-    int client_socket;                    // Which client owns this  
+    int client_socket;                    
 } JobMemory;
 
-extern JobMemory *job_memories[MAX_JOBS];  // Maps job_id → memory
-extern char phys_mem[NUM_FRAMES][PAGE_SIZE]; // Physical memory
-extern int used_frames;  
 
+extern JobMemory *job_memories[MAX_JOBS];        // maps job_id to the memory
+extern char phys_mem[NUM_FRAMES][PAGE_SIZE];     // physical memory
+extern int used_frames;  
 
 extern int frame_queue[NUM_FRAMES];  
 extern int frame_queue_front;
 extern int frame_queue_rear;
 extern int used_frames;
+
 
 // Message structure
 struct message
@@ -63,8 +63,7 @@ struct message
     int priority;  
 };
 
-
-// Job structure
+// job structure
 typedef struct
 {
     int jobid;
@@ -73,7 +72,7 @@ typedef struct
     char content[MSG_SIZE];
     int client_socket;            // To track which client sent the job
     int job_type;
-    int priority;                 // Priority for scheduling
+    int priority;                 // priority for scheduling
     time_t arrival_time;    
     time_t completion_time;
 } Job;
@@ -85,8 +84,17 @@ typedef struct
     Job jobs[MAX_JOBS];
     int front, rear, count;
      int current_algorithm;
-    int rr_counter;
 } JobQueue;
+
+// resources
+typedef struct
+{
+    int resource_id;            
+    char resource_name[MSG_SIZE]; 
+    int is_allocated;         
+    int job_id;                
+} Resource;
+
 
 
 extern JobQueue *queue;
